@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum ExpenseStatus {
+  DRAFT
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SKIPPED
+}
+
+enum RuleType {
+  SEQUENTIAL
+  PERCENTAGE
+  SPECIFIC_APPROVER
+  HYBRID
+}
+
+model Company {
+  id              String             @id @default(cuid())
+  name            String
+  country         String
+  defaultCurrency String
+  users           User[]
+  expenses        Expense[]
+  workflows       ApprovalWorkflow[]
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+model User {
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  passwordHash        String
+  role                Role            @default(EMPLOYEE)
+  companyId           String
+  managerId           String?
+  company             Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  manager             User?           @relation("ManagerToEmployees", fields: [managerId], references: [id], onDelete: SetNull)
+  reports             User[]          @relation("ManagerToEmployees")
+  expenses            Expense[]
+  assignedApprovals   StepApprover[]
+  approvalAssignments ExpenseApproval[] @relation("ApproverAssignments")
+  expenseApprovals    ExpenseApproval[] @relation("ApprovalActionBy")
+  workflowsAsSpecific ApprovalWorkflow[] @relation("SpecificApproverUser")
+  auditLogs           AuditLog[]
+  notifications       Notification[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([managerId])
+}
+
+model Expense {
+  id                    String           @id @default(cuid())
+  companyId             String
+  userId                String
+  workflowId            String?
+  title                 String
+  amount                Decimal          @db.Decimal(14, 2)
+  currency              String
+  convertedAmount       Decimal          @db.Decimal(14, 2)
+  convertedCurrency     String
+  category              String
+  description           String?          @db.Text
+  expenseDate           DateTime
+  receiptUrl            String?
+  receiptPublicId       String?
+  rawOCRText            String?          @db.Text
+  parsedMerchant        String?
+  parsedAmount          Decimal?         @db.Decimal(14, 2)
+  parsedDate            String?
+  parsedTax             Decimal?         @db.Decimal(14, 2)
+  parsedCategory        String?
+  parsedDescription     String?          @db.Text
+  status                ExpenseStatus    @default(DRAFT)
+  currentStepOrder      Int              @default(0)
+  company               Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workflow              ApprovalWorkflow? @relation(fields: [workflowId], references: [id], onDelete: SetNull)
+  items                 ExpenseItem[]
+  approvals             ExpenseApproval[]
+  auditLogs             AuditLog[]
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@index([companyId, status])
+  @@index([userId])
+  @@index([workflowId])
+}
+
+model ExpenseItem {
+  id          String   @id @default(cuid())
+  expenseId   String
+  name        String
+  quantity    Int      @default(1)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  totalAmount Decimal  @db.Decimal(14, 2)
+  expense     Expense  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([expenseId])
+}
+
+model ApprovalWorkflow {
+  id                     String             @id @default(cuid())
+  companyId              String
+  name                   String
+  description            String?
+  isActive               Boolean            @default(true)
+  managerApprovalRequired Boolean           @default(false)
+  ruleType               RuleType           @default(SEQUENTIAL)
+  percentageThreshold    Int?
+  specificApproverId     String?
+  company                Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  specificApprover       User?              @relation("SpecificApproverUser", fields: [specificApproverId], references: [id], onDelete: SetNull)
+  conditions             WorkflowCondition[]
+  steps                  ApprovalStep[]
+  expenses               Expense[]
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([companyId, isActive])
+}
+
+model ApprovalStep {
+  id          String         @id @default(cuid())
+  workflowId  String
+  name        String
+  stepOrder   Int
+  ruleType    RuleType       @default(SEQUENTIAL)
+  threshold   Int?
+  workflow    ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  approvers   StepApprover[]
+  approvals   ExpenseApproval[]
+
+  @@unique([workflowId, stepOrder])
+  @@index([workflowId])
+}
+
+model StepApprover {
+  id       String       @id @default(cuid())
+  stepId   String
+  userId   String
+  step     ApprovalStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, userId])
+  @@index([userId])
+}
+
+model ExpenseApproval {
+  id          String         @id @default(cuid())
+  expenseId   String
+  stepId      String
+  approverId  String
+  actionById  String?
+  status      ApprovalStatus @default(PENDING)
+  comment     String?        @db.Text
+  decidedAt   DateTime?
+  expense     Expense        @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  step        ApprovalStep   @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  approver    User           @relation("ApproverAssignments", fields: [approverId], references: [id], onDelete: Cascade)
+  actionBy    User?          @relation("ApprovalActionBy", fields: [actionById], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+
+  @@unique([expenseId, stepId, approverId])
+  @@index([approverId, status])
+}
+
+model WorkflowCondition {
+  id            String           @id @default(cuid())
+  workflowId    String
+  field         String
+  operator      String
+  stringValue   String?
+  numericValue  Decimal?         @db.Decimal(14, 2)
+  workflow      ApprovalWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String?
+  expenseId  String?
+  action     String
+  entityType String
+  entityId   String
+  details    String?  @db.Text
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+  @@index([expenseId])
+}
+
+model Notification {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, userId, isRead])
+}
