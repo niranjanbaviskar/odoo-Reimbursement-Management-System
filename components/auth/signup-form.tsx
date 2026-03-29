@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -92,6 +93,19 @@ export function SignupForm() {
                 return;
             }
 
+            const signInResult = await signIn("credentials", {
+                email: values.email,
+                password: values.password,
+                redirect: false,
+            });
+
+            if (!signInResult?.error) {
+                toast.success("Account created successfully. Welcome to ClaimFlow.");
+                router.push("/dashboard");
+                router.refresh();
+                return;
+            }
+
             toast.success("Company created. Please sign in.");
             router.push("/login");
         } catch {
@@ -141,7 +155,7 @@ export function SignupForm() {
                         <Select
                             onValueChange={(value) => {
                                 const nextCountry = String(value);
-                                form.setValue("country", nextCountry);
+                                form.setValue("country", nextCountry, { shouldValidate: true });
                                 const selected = countries.find((item) => item.country === nextCountry);
                                 setSelectedCurrency(selected?.currency || "USD");
                             }}
@@ -162,7 +176,7 @@ export function SignupForm() {
                             <p className="text-xs text-rose-600">{form.formState.errors.country.message}</p>
                         ) : null}
                     </div>
-                    <Button disabled={loading} className="md:col-span-2 bg-indigo-600 hover:bg-indigo-500">
+                    <Button type="submit" disabled={loading} className="md:col-span-2 bg-indigo-600 hover:bg-indigo-500">
                         {loading ? "Creating workspace..." : "Create Company"}
                     </Button>
                 </form>

@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { fail, ok } from "@/lib/api";
 import { getAuthSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assignWorkflowToExpense } from "@/lib/services/workflow-engine";
 
 export async function GET() {
     try {
@@ -10,6 +11,24 @@ export async function GET() {
         if (!session?.user) return fail("Unauthorized", 401);
         if (session.user.role !== Role.ADMIN && session.user.role !== Role.MANAGER) {
             return fail("Forbidden", 403);
+        }
+
+        const orphanExpenses = await prisma.expense.findMany({
+            where: {
+                companyId: session.user.companyId,
+                status: "PENDING",
+                approvals: { none: {} },
+            },
+            select: { id: true },
+            take: 50,
+        });
+
+        if (orphanExpenses.length) {
+            await Promise.all(
+                orphanExpenses.map((expense) =>
+                    assignWorkflowToExpense(session.user.companyId, expense.id).catch(() => null),
+                ),
+            );
         }
 
         const pending = await prisma.expenseApproval.findMany({

@@ -96,11 +96,20 @@ export async function POST(req: Request) {
             approvals: stepApprovals,
         });
 
-        if (!decision.resolved) {
+        const isLegacyDefaultSequentialStep =
+            expense.workflowId?.endsWith("-default-workflow") && pendingRecord.step.ruleType === "SEQUENTIAL";
+        const approvedCount = stepApprovals.filter((approval) => approval.status === ApprovalStatus.APPROVED).length;
+        const totalApprovers = stepApprovals.length || 1;
+        const isDefaultThresholdMet = (approvedCount / totalApprovers) * 100 >= 60;
+        const effectiveDecision = isLegacyDefaultSequentialStep
+            ? { resolved: isDefaultThresholdMet, approved: isDefaultThresholdMet }
+            : decision;
+
+        if (!effectiveDecision.resolved) {
             return ok({ status: "WAITING_FOR_MORE_APPROVERS" });
         }
 
-        if (!decision.approved) {
+        if (!effectiveDecision.approved) {
             await prisma.expense.update({
                 where: { id: expense.id },
                 data: { status: ExpenseStatus.REJECTED },

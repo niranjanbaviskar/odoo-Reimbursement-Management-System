@@ -11,7 +11,7 @@ export async function GET() {
 
         const companyId = session.user.companyId;
 
-        const [employees, managers, expenses, byCategory, monthly] = await Promise.all([
+        const [employees, managers, expenses, byCategory, monthlyRaw] = await Promise.all([
             prisma.user.count({ where: { companyId, role: Role.EMPLOYEE } }),
             prisma.user.count({ where: { companyId, role: Role.MANAGER } }),
             prisma.expense.findMany({
@@ -23,7 +23,7 @@ export async function GET() {
                 where: { companyId },
                 _sum: { convertedAmount: true },
             }),
-            prisma.$queryRaw<Array<{ month: string; total: number }>>`
+            prisma.$queryRaw<Array<{ month: string; total: unknown }>>`
         SELECT DATE_FORMAT(expenseDate, '%Y-%m') as month,
                SUM(convertedAmount) as total
         FROM Expense
@@ -39,6 +39,11 @@ export async function GET() {
         const totalReimbursement = expenses
             .filter((e) => e.status === ExpenseStatus.APPROVED)
             .reduce((sum, e) => sum + Number(e.convertedAmount), 0);
+
+        const monthly = monthlyRaw.map((entry) => ({
+            month: entry.month,
+            total: Number(entry.total ?? 0),
+        }));
 
         return ok({
             employees,

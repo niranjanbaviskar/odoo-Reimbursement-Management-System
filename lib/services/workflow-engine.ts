@@ -71,7 +71,97 @@ export async function assignWorkflowToExpense(companyId: string, expenseId: stri
         .at(0) as WorkflowWithRules | undefined;
 
     if (!selected) {
-        return null;
+        const submitter = await prisma.user.findUnique({
+            where: { id: expense.userId },
+            select: { managerId: true },
+        });
+
+        const managersAndAdmins = await prisma.user.findMany({
+            where: {
+                companyId,
+                OR: [{ role: "MANAGER" }, { role: "ADMIN" }],
+            },
+            select: { id: true },
+        });
+
+        const orderedApproverIds = [
+            ...(submitter?.managerId ? [submitter.managerId] : []),
+            ...managersAndAdmins.map((u) => u.id),
+        ];
+        const approverIds = Array.from(new Set(orderedApproverIds));
+
+        if (!approverIds.length) {
+            return null;
+        }
+
+        const defaultWorkflow = await prisma.approvalWorkflow.upsert({
+            where: { id: `${companyId}-default-workflow` },
+            update: {
+                isActive: true,
+                ruleType: RuleType.PERCENTAGE,
+                percentageThreshold: 60,
+            },
+            create: {
+                id: `${companyId}-default-workflow`,
+                companyId,
+                name: "Default Expense Approval",
+                description: "Auto-generated fallback workflow for expense approvals",
+                managerApprovalRequired: true,
+                ruleType: RuleType.PERCENTAGE,
+                percentageThreshold: 60,
+                isActive: true,
+            },
+        });
+
+        const defaultStep = await prisma.approvalStep.upsert({
+            where: {
+                workflowId_stepOrder: {
+                    workflowId: defaultWorkflow.id,
+                    stepOrder: 1,
+                },
+            },
+            update: {
+                name: "Primary Review",
+                ruleType: RuleType.PERCENTAGE,
+                threshold: 60,
+            },
+            create: {
+                workflowId: defaultWorkflow.id,
+                name: "Primary Review",
+                stepOrder: 1,
+                ruleType: RuleType.PERCENTAGE,
+                threshold: 60,
+            },
+        });
+
+        await prisma.stepApprover.createMany({
+            data: approverIds.map((userId) => ({
+                stepId: defaultStep.id,
+                userId,
+            })),
+            skipDuplicates: true,
+        });
+
+        await prisma.expense.update({
+            where: { id: expenseId },
+            data: {
+                workflowId: defaultWorkflow.id,
+                status: ExpenseStatus.IN_REVIEW,
+                currentStepOrder: 1,
+            },
+        });
+
+        await prisma.expenseApproval.createMany({
+            data: approverIds.map((approverId) => ({
+                expenseId,
+                stepId: defaultStep.id,
+                approverId,
+                status: ApprovalStatus.PENDING,
+            })),
+            skipDuplicates: true,
+        });
+
+        return defaultWorkflow.id;
     }
 
     await prisma.expense.update({

@@ -185,7 +185,7 @@ export function ExpenseForm() {
                     </label>
                 </div>
 
-                <Button disabled={loading} className="md:col-span-2 bg-indigo-600 hover:bg-indigo-500">
+                <Button type="submit" disabled={loading} className="md:col-span-2 bg-indigo-600 hover:bg-indigo-500">
                     {loading ? "Submitting..." : "Submit for Approval"}
                 </Button>
             </form>

@@ -1,4 +1,4 @@
-import { ExpenseStatus, Prisma, Role } from "@prisma/client";
+import { ExpenseStatus, Prisma } from "@prisma/client";
 
 import { fail, ok } from "@/lib/api";
 import { getAuthSession } from "@/lib/auth";
@@ -33,22 +33,6 @@ export async function GET(req: Request) {
             ...(category ? { category } : {}),
             ...(employeeId ? { userId: employeeId } : {}),
         };
-
-        if (session.user.role === Role.EMPLOYEE) {
-            where.userId = session.user.id;
-        }
-
-        if (session.user.role === Role.MANAGER) {
-            const team = await prisma.user.findMany({
-                where: {
-                    companyId: session.user.companyId,
-                    managerId: session.user.id,
-                },
-                select: { id: true },
-            });
-
-            where.userId = { in: [session.user.id, ...team.map((u) => u.id)] };
-        }
 
         const expenses = await prisma.expense.findMany({
             where,

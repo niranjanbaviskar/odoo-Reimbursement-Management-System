@@ -50,16 +50,34 @@ export function ExpensesTable({ role }: { role: Role }) {
     const [data, setData] = useState<ExpenseRecord[]>([]);
     const [globalFilter, setGlobalFilter] = useState("");
     const [status, setStatus] = useState("all");
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const load = async () => {
+            setLoading(true);
+            setError(null);
             const params = new URLSearchParams();
             if (status !== "all") params.set("status", status);
             if (globalFilter) params.set("q", globalFilter);
 
-            const response = await fetch(`/api/expenses?${params.toString()}`);
-            const json = await response.json();
-            setData(json.data || []);
+            try {
+                const response = await fetch(`/api/expenses?${params.toString()}`, { cache: "no-store" });
+                const json = await response.json();
+
+                if (!response.ok || !json?.success) {
+                    setError(json?.error || "Failed to load expenses");
+                    setData([]);
+                    return;
+                }
+
+                setData(json.data || []);
+            } catch {
+                setError("Failed to load expenses");
+                setData([]);
+            } finally {
+                setLoading(false);
+            }
         };
 
         void load();
@@ -143,6 +161,25 @@ export function ExpensesTable({ role }: { role: Role }) {
                         ))}
                     </TableHeader>
                     <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center text-slate-500">
+                                    Loading expenses...
+                                </TableCell>
+                            </TableRow>
+                        ) : error ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center text-rose-500">
+                                    {error}
+                                </TableCell>
+                            </TableRow>
+                        ) : table.getRowModel().rows.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={6} className="text-center text-slate-500">
+                                    No expenses found.
+                                </TableCell>
+                            </TableRow>
+                        ) : null}
                         {table.getRowModel().rows.map((row) => (
                             <TableRow key={row.id}>
                                 {row.getVisibleCells().map((cell) => (

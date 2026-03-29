@@ -62,7 +62,7 @@ export function LoginForm() {
                         <Input type="password" {...form.register("password")} />
                     </div>
 
-                    <Button disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500">
+                    <Button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500">
                         {loading ? "Signing in..." : "Sign in"}
                     </Button>
                 </form>

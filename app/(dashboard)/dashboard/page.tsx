@@ -9,7 +9,7 @@ export default async function DashboardPage() {
 
     const companyId = session.user.companyId;
 
-    const [expenses, users, pendingApprovals] = await Promise.all([
+    const [expenses, users, pendingApprovals, statusGroups] = await Promise.all([
         prisma.expense.findMany({
             where: { companyId },
             orderBy: { createdAt: "desc" },
@@ -18,7 +18,17 @@ export default async function DashboardPage() {
         }),
         prisma.user.findMany({ where: { companyId }, select: { role: true } }),
         prisma.expenseApproval.count({ where: { approverId: session.user.id, status: "PENDING" } }),
+        prisma.expense.groupBy({
+            by: ["status"],
+            where: { companyId },
+            _count: { _all: true },
+        }),
     ]);
+
+    const approvedCount = statusGroups.find((entry) => entry.status === "APPROVED")?._count._all ?? 0;
+    const pendingCount = statusGroups
+        .filter((entry) => entry.status === "PENDING" || entry.status === "IN_REVIEW")
+        .reduce((sum, entry) => sum + entry._count._all, 0);
 
     return (
         <DashboardOverview
@@ -34,6 +44,8 @@ export default async function DashboardPage() {
             }))}
             totalEmployees={users.filter((u) => u.role === "EMPLOYEE").length}
             totalManagers={users.filter((u) => u.role === "MANAGER").length}
+            approvedCount={approvedCount}
+            pendingCount={pendingCount}
             pendingApprovals={pendingApprovals}
         />
     );

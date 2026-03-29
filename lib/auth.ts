@@ -6,7 +6,10 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "@/lib/prisma";
 import { signInSchema } from "@/lib/validators/auth";
 
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET || "claimflow-dev-secret-change-in-production";
+
 export const authOptions: NextAuthOptions = {
+    secret: AUTH_SECRET,
     session: { strategy: "jwt" },
     pages: {
         signIn: "/login",

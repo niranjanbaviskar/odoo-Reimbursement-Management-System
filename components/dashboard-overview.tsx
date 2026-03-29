@@ -29,6 +29,8 @@ type DashboardOverviewProps = {
     expenses: ExpenseRow[];
     totalEmployees: number;
     totalManagers: number;
+    approvedCount: number;
+    pendingCount: number;
     pendingApprovals: number;
 };
 
@@ -37,11 +39,11 @@ export function DashboardOverview({
     expenses,
     totalEmployees,
     totalManagers,
+    approvedCount,
+    pendingCount,
     pendingApprovals,
 }: DashboardOverviewProps) {
-    const approvedCount = expenses.filter((expense) => expense.status === "APPROVED").length;
     const rejectedCount = expenses.filter((expense) => expense.status === "REJECTED").length;
-    const pendingCount = expenses.filter((expense) => ["PENDING", "IN_REVIEW"].includes(expense.status)).length;
 
     const chartData = expenses.reduce<Record<string, number>>((acc, expense) => {
         acc[expense.category] = (acc[expense.category] || 0) + expense.convertedAmount;
@@ -76,7 +78,12 @@ export function DashboardOverview({
                         <CardTitle className="text-sm text-slate-500">Pending</CardTitle>
                     </CardHeader>
                     <CardContent className="flex items-center justify-between">
-                        <p className="text-2xl font-semibold">{role === "EMPLOYEE" ? pendingCount : pendingApprovals}</p>
+                        <div>
+                            <p className="text-2xl font-semibold">{pendingCount}</p>
+                            {role !== "EMPLOYEE" && (
+                                <p className="text-xs text-slate-500">My queue: {pendingApprovals}</p>
+                            )}
+                        </div>
                         <Clock3 className="size-5 text-amber-600" />
                     </CardContent>
                 </Card>

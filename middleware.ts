@@ -1,10 +1,13 @@
 import { withAuth } from "next-auth/middleware";
 
+const AUTH_SECRET = process.env.NEXTAUTH_SECRET || "claimflow-dev-secret-change-in-production";
+
 export default withAuth(
     function middleware() {
         return;
     },
     {
+        secret: AUTH_SECRET,
         callbacks: {
             authorized: ({ token, req }) => {
                 if (req.nextUrl.pathname.startsWith("/dashboard") || req.nextUrl.pathname.startsWith("/approvals") || req.nextUrl.pathname.startsWith("/expenses") || req.nextUrl.pathname.startsWith("/workflows") || req.nextUrl.pathname.startsWith("/analytics") || req.nextUrl.pathname.startsWith("/users") || req.nextUrl.pathname.startsWith("/audit-logs") || req.nextUrl.pathname.startsWith("/settings")) {
